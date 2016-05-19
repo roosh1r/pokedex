@@ -1,14 +1,15 @@
 {
   "name"         : "node-web-scrape",
-  "version"      : "0.0.1",
+  "version"      : "0.0.3",
   "description"  : "Scrape le web.",
   "main"         : "server.js",
-  "author"       : "Scotch",
+  "author"       : "Ruchir",
   "dependencies" : {
     "express"    : "latest",
     "request"    : "latest",
     "cheerio"    : "latest",
     "underscore" : "latest",
-    "async" : "latest"
+    "async"      : "latest",
+    "mongoose"   : "latest"
   }
 }
