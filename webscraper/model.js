@@ -1,5 +1,4 @@
 var mongoose = require('mongoose');
-var _ = require('underscore');
 
 mongoose.connect('mongodb://localhost:27017/pokedex', function( error ) {
     if (error) { console.log('Error: ' + error ); }

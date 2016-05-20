@@ -71,10 +71,41 @@ app.get('/data', function(req, res) {
 
     var urlList = [];
 
-    pokemonURL.find( {} , function( err, item) {
-        _.each(item, function( myDoc) {
-            urList.push(myDoc.url);
+    var scrapeItem = function( list ) {
+        console.log('List = ' + list);
+        var updatedList = _.map( list, function (item) {
+            var url = item;
+            r(url, function( err, response, html) {
+                if( err )
+                    throw err;
+                $ = cheerio.load(html);
+                if (response.statusCode == 200 ) {
+                    console.log ( url + " - Scraped" );
+                    return _.reject(this, function( current ){
+                        console.log( 'rejecting - ' + item );
+                        return current == item;
+                    });
+                } else {
+                    console.log ( url + " - NOT Scraped" );
+                    console.log(this);
+                    return this;
+                }
+
+            });
         });
+        console.log(updatedList);
+        return updatedList;
+    };
+
+    pokemonURL.find( {} ).sort({ _id: 1 }).exec( function ( err, result ) {
+        _.each(result, function (index) {
+            urlList.push(index.url);
+        });
+        console.log( urlList.length );
+        while (urlList.length > 0 ) {
+            var newArray = scrapeItem( urlList );
+            urlList = newArray;
+        }
     });
 
 /***
