@@ -1,7 +1,6 @@
 var express = require('express');
 var fs = require('fs');
-var request = require('request');
-var rp = require('request-promise');
+var request = require('request-promise');
 var cheerio = require('cheerio');
 var _ = require('underscore');
 var mongoose = require('mongoose');
@@ -20,10 +19,15 @@ app.get('/scrape', function(req, res) {
     BASE_URL = 'http://pokemondb.net/';
     url = BASE_URL + 'pokedex/national';
     var r = request.defaults({'proxy': proxyUrl});
-    r(url, function(error, response, html) {
-        if (!error && response.statusCode == 200) {
-            var $ = cheerio.load(html);
 
+    var options = {
+        uri: BASE_URL+url,
+        transform: function(body){
+            return cheerio.load(body);
+        }
+    };
+    r(options)
+        .then( function($) {
             $('.infocard-tall ').slice(0, 151).filter(function() {
                 var data = $(this);
                 var pokeName = data.children('.ent-name').first().text();
@@ -48,22 +52,18 @@ app.get('/scrape', function(req, res) {
                     }
                 });
             });
-        }
-        else {
-            console.log( response.statusCode + error);
-        }
-        //mongoose.connection.close();
-    });
+        })
+        .catch( function(err) {
+            console.log(options.uri + ' - not scraped');
+        });
 
     res.send('Check your console!');
-
 });
 
 app.get('/data', function(req, res) {
 
     var proxyUrl = 'http://one.proxy.att.com:8080';
     var r = request.defaults({'proxy': proxyUrl});
-    var rq = rp.defaults({'proxy': proxyURL });
 
     String.prototype.allReplace = function(obj) {
         var retStr = this;
@@ -75,102 +75,113 @@ app.get('/data', function(req, res) {
 
     var urlList = [];
 
-    var crawlPage = function ( list, index ) {
+    var crawlPage = function ( index, callback ) {
+//        console.log('crawlPage invoked');
         var options = {
-            uri: list[index],
+            //uri: list[index],
+            uri: index,
             transform: function( body ){
                 return cheerio.load(body);
             }
         };
-        rq( options )
+        r( options )
             .then( function ($) {
-                console.log('Scraped - ' + options.uri);
+                var name, _id, indexNumber, species, description, new_height, weight, imageUrl;
+
+                var tree = {};
+
+                var pokemonType = [];
+
+                var basicData = function () {
+                    _id = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(0, 1).text();
+                    indexNumber = '#' + _id;
+                    name = $('h1').first().text();
+                    $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(1, 2).children('a').filter(function() {
+                        var data = $(this);
+                        pokemonType.push(data.text());
+                    });
+                    species = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
+                    var height = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(3, 4).text();
+                    new_height = height.allReplace( { '\u2032' : "ft ", '\u2033': "in " } );
+                    weight = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(4, 5).text();
+                    imageUrl = $('div.figure').children('img').attr('src');
+                    description = $('div#dex-flavor').siblings('table').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
+                };
+
+                var evolution_data = function() {
+
+                    var data = $('div.infocard-evo-list').children().not('.infocard-group').find('a.ent-name');
+                    var first = data.slice(0, 1).text();
+                    var first_id = data.slice(0, 1).siblings('small').not('.aside').text();
+                    var second = data.slice(1, 2).text();
+                    var second_id = data.slice(1, 2).siblings('small').not('.aside').text();
+                    var third = data.slice(2,3).text();
+                    var third_id = data.slice(2, 3).siblings('small').not('.aside').text();
+
+                    if ( first_id ) { tree.one = { id: first_id, name: first}; }
+                    if ( second_id) { tree.two = { id: second_id, name: second}; }
+                    if (third_id) { tree.three = { id: third_id, name: third}; }
+                };
+
+                basicData();
+                evolution_data();
+
+                var PokemonEntry = new PokemonData( {
+                    _id: Number(_id),
+                    indexNumber: indexNumber,
+                    name: name,
+                    imageUrl: imageUrl,
+                    species: species,
+                    pokemonType: pokemonType,
+                    measures: {
+                        height: new_height,
+                        weight: weight
+                    },
+                    description: description,
+                    evoTree: tree
+                });
+
+                PokemonData.find( {name: PokemonEntry.name}, function (err, docs) {
+                    if (docs.length) {
+                        console.log( PokemonEntry.name + ' already exists in the db');
+                    } else {
+                        PokemonEntry.save( function (err) {
+                            if (err) throw err;
+
+                            console.log(PokemonEntry.name + ' data added');
+                        });
+                    }
+                });
+
+                var results = 'Done - ' + options.uri;
+                callback(null, results);
             })
             .catch( function (err) {
-                console.log('Not scraped - ' + options.uri);
+                var results = 'Not scraped - ' + options.uri;
+                callback(null, results);
             });
     };
 
-    var asyncReqs =function ( list ) {
+    var asyncReqs = function ( list ) {
         var taskList = [];
-        _.each(list, function (index) {
-            var taskObj = {
-                list: this,
-                index: this.indexOf(index),
-                task: function( callback ){
-                    callback( this.list, this.index);
-                }
-            };
-            taskList.push(taskObj);
-        }, list);
-
-        async.series(taskList, function (err, results) { console.log(results); });
+        list.forEach(function(item){
+            taskList.push( function(callback) {
+                setTimeout(function() {
+                    crawlPage(item, callback);
+                }, 500);
+            });
+        });
+        async.series(taskList, function (err, results) { console.log('Scraping completed'); });
     };
 
     pokemonURL.find( {} ).sort({ _id: 1 }).exec( function ( err, result ) {
         _.each(result, function (index) {
             urlList.push(index.url);
         });
+        console.log('Starting scrapping....');
         asyncReqs(urlList);
     });
 
-/***
-    pokemonURL.find( {} , function( err, item) {
-        _.each(item, function( myDoc) {
-            var myUrl = myDoc.url;
-            r(myUrl, function(error, response, html) {
-                    if (!error && response.statusCode == 200) {
-                        var $ = cheerio.load(html);
-                        var _id = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(0, 1).text();
-                        var indexNumber = '#' + _id;
-                        var name = $('h1').first().text();
-                        var pokemonType = [];
-                        $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(1, 2).children('a').filter(function() {
-                            var data = $(this);
-                            pokemonType.push(data.text());
-                        });
-                        var species = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
-                        var height = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(3, 4).text();
-                        var new_height = height.allReplace( { '\u2032' : "ft ", '\u2033': "in " } );
-                        var weight = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(4, 5).text();
-                        var imageUrl = $('div.figure').children('img').attr('src');
-                        var description = $('div#dex-flavor').siblings('table').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
-
-                        var PokemonEntry = new PokemonData( {
-                            _id: Number(_id),
-                            indexNumber: indexNumber,
-                            name: name,
-                            imageUrl: imageUrl,
-                            species: species,
-                            pokemonType: pokemonType,
-                            measures: {
-                                height: new_height,
-                                weight: weight
-                            },
-                            description: description
-                        });
-                        PokemonData.find( {name: PokemonEntry.name}, function (err, docs) {
-                            if (docs.length) {
-                                console.log( PokemonEntry.name + ' already exists in the db');
-                            } else {
-                                PokemonEntry.save( function (err) {
-                                    if (err) throw err;
-
-                                    console.log(PokemonEntry.name + ' data added');
-                                });
-                            }
-                        });
-                    }
-                    else {
-                        console.log( response.statusCode + error);
-                    }
-                //mongoose.connection.close();
-
-            });
-
-        });
-    });
-***/
     res.send('Check your console for pokeman data!');
 });
 

@@ -16,11 +16,11 @@ var pokemonSchema = {
     weight: {type: String, required: true }
   },
   description: { type: String, required: true },
-//  evolution: {
-//    first: [ {type: String, required: true } ],
-//    second: [ {type: String } ],
-//    third: [ { type: String } ],
-//  },
+  evoTree: {
+    one: { _id: { type: String }, name: { type: String } },
+    two: { _id: { type: String }, name: { type: String } },
+    three: { _id: { type: String }, name: { type: String } },
+  }
   //location: _Location.locationSchema
 };
 /****************** END ******************/
