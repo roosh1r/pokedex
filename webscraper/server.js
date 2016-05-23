@@ -1,10 +1,12 @@
 var express = require('express');
 var fs = require('fs');
 var request = require('request');
+var rp = require('request-promise');
 var cheerio = require('cheerio');
 var _ = require('underscore');
 var mongoose = require('mongoose');
 var model = require('./model');
+var async = require('async');
 
 var pokemonURL = model.pokemonURL;
 var PokemonData = model.PokemonData;
@@ -61,6 +63,8 @@ app.get('/data', function(req, res) {
 
     var proxyUrl = 'http://one.proxy.att.com:8080';
     var r = request.defaults({'proxy': proxyUrl});
+    var rq = rp.defaults({'proxy': proxyURL });
+
     String.prototype.allReplace = function(obj) {
         var retStr = this;
         for (var x in obj) {
@@ -71,41 +75,43 @@ app.get('/data', function(req, res) {
 
     var urlList = [];
 
-    var scrapeItem = function( list ) {
-        console.log('List = ' + list);
-        var updatedList = _.map( list, function (item) {
-            var url = item;
-            r(url, function( err, response, html) {
-                if( err )
-                    throw err;
-                $ = cheerio.load(html);
-                if (response.statusCode == 200 ) {
-                    console.log ( url + " - Scraped" );
-                    return _.reject(this, function( current ){
-                        console.log( 'rejecting - ' + item );
-                        return current == item;
-                    });
-                } else {
-                    console.log ( url + " - NOT Scraped" );
-                    console.log(this);
-                    return this;
-                }
-
+    var crawlPage = function ( list, index ) {
+        var options = {
+            uri: list[index],
+            transform: function( body ){
+                return cheerio.load(body);
+            }
+        };
+        rq( options )
+            .then( function ($) {
+                console.log('Scraped - ' + options.uri);
+            })
+            .catch( function (err) {
+                console.log('Not scraped - ' + options.uri);
             });
-        });
-        console.log(updatedList);
-        return updatedList;
+    };
+
+    var asyncReqs =function ( list ) {
+        var taskList = [];
+        _.each(list, function (index) {
+            var taskObj = {
+                list: this,
+                index: this.indexOf(index),
+                task: function( callback ){
+                    callback( this.list, this.index);
+                }
+            };
+            taskList.push(taskObj);
+        }, list);
+
+        async.series(taskList, function (err, results) { console.log(results); });
     };
 
     pokemonURL.find( {} ).sort({ _id: 1 }).exec( function ( err, result ) {
         _.each(result, function (index) {
             urlList.push(index.url);
         });
-        console.log( urlList.length );
-        while (urlList.length > 0 ) {
-            var newArray = scrapeItem( urlList );
-            urlList = newArray;
-        }
+        asyncReqs(urlList);
     });
 
 /***
