@@ -1,0 +1,21 @@
+{
+  "name"            : "Pokedex",
+  "version"         : "0.0.1",
+  "description"     : "Gotta catch 'em all.",
+  "main"            : "app.js",
+  "author"          : "Roosh1r",
+  "dependencies"    : {
+    "express"       : "latest",
+    "underscore"    : "latest",
+    "mongoose"      : "4.4.19",
+    "wagner-core"   : "latest",
+    "http-status"   : "latest"
+  },
+  "devDependencies" : {
+    "mocha"         : "latest",
+    "superagent"    : "latest"
+  },
+  "scripts"         : {
+    "test"          : "mocha test.js"
+  }
+}
