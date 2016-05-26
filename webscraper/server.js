@@ -4,11 +4,13 @@ var request = require('request-promise');
 var cheerio = require('cheerio');
 var _ = require('underscore');
 var mongoose = require('mongoose');
-var model = require('./model');
 var async = require('async');
+
+var model = require('./model');
 
 var pokemonURL = model.pokemonURL;
 var PokemonData = model.PokemonData;
+var evoTree = model.evoTree;
 
 var app = express();
 
@@ -86,45 +88,65 @@ app.get('/data', function(req, res) {
         };
         r( options )
             .then( function ($) {
-                var name, _id, indexNumber, species, description, new_height, weight, imageUrl;
 
-                var tree = {};
+                var name, _id, indexNumber, species, description, new_height, weight, imageUrl, first, first_id, second, second_d, third, third_id, currentID;
 
                 var pokemonType = [];
 
-                var basicData = function () {
-                    _id = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(0, 1).text();
-                    indexNumber = '#' + _id;
-                    name = $('h1').first().text();
-                    $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(1, 2).children('a').filter(function() {
-                        var data = $(this);
-                        pokemonType.push(data.text());
-                    });
-                    species = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
-                    var height = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(3, 4).text();
-                    new_height = height.allReplace( { '\u2032' : "ft ", '\u2033': "in " } );
-                    weight = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(4, 5).text();
-                    imageUrl = $('div.figure').children('img').attr('src');
-                    description = $('div#dex-flavor').siblings('table').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
+                var tree = {
+                    _id: '',
+                    name: '',
+                    parent: {
+                        index:'',
+                        name: ''
+                    },
+                    ancestor: []
                 };
 
-                var evolution_data = function() {
+                _id = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(0, 1).text();
+                indexNumber = '#' + _id;
+                name = $('h1').first().text();
+                $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(1, 2).children('a').filter(function() {
+                    var stuff = $(this);
+                    pokemonType.push(stuff.text());
+                });
+                species = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
+                var height = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(3, 4).text();
+                new_height = height.allReplace( { '\u2032' : "ft ", '\u2033': "in " } );
+                weight = $('div#dex-basics').next('div').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(4, 5).text();
+                imageUrl = $('div.figure').children('img').attr('src');
+                description = $('div#dex-flavor').siblings('table').find('td', 'tr', 'tbody', 'table.vitals-table', 'div.tabset-basics').slice(2, 3).text();
 
-                    var data = $('div.infocard-evo-list').children().not('.infocard-group').find('a.ent-name');
-                    var first = data.slice(0, 1).text();
-                    var first_id = data.slice(0, 1).siblings('small').not('.aside').text();
-                    var second = data.slice(1, 2).text();
-                    var second_id = data.slice(1, 2).siblings('small').not('.aside').text();
-                    var third = data.slice(2,3).text();
-                    var third_id = data.slice(2, 3).siblings('small').not('.aside').text();
 
-                    if ( first_id ) { tree.one = { id: first_id, name: first}; }
-                    if ( second_id) { tree.two = { id: second_id, name: second}; }
-                    if (third_id) { tree.three = { id: third_id, name: third}; }
-                };
 
-                basicData();
-                evolution_data();
+                var evoData = $('div.infocard-evo-list').children().not('.infocard-group').find('a.ent-name');
+
+                first = evoData.slice(0, 1).text();
+                first_id = evoData.slice(0, 1).siblings('small').not('.aside').text();
+                second = evoData.slice(1, 2).text();
+                second_id = evoData.slice(1, 2).siblings('small').not('.aside').text();
+                third = evoData.slice(2,3).text();
+                third_id = evoData.slice(2, 3).siblings('small').not('.aside').text();
+
+                tree._id = Number(_id);
+                tree.name = name;
+
+                if ( third_id == indexNumber ){
+                    tree.parent.index = second_id;
+                    tree.parent.name = second;
+                    tree.ancestor.push( { index: first_id, name: first } );
+                    tree.ancestor.push( { index: second_id, name: second } );
+
+                } else if ( second_id == indexNumber ) {
+                    tree.parent.index = first_id;
+                    tree.parent.name = first;
+                    tree.ancestor.push( { index: first_id, name: first } );
+                }
+                else if ( first_id == indexNumber ) {
+                    tree.parent.index = '';
+                    tree.parent.name = '';
+                    tree.ancestor.push( { index: '', name: '' } );
+                }
 
                 var PokemonEntry = new PokemonData( {
                     _id: Number(_id),
@@ -138,16 +160,16 @@ app.get('/data', function(req, res) {
                         weight: weight
                     },
                     description: description,
-                    evoTree: tree
+                    evolution: tree
                 });
 
                 PokemonData.find( {name: PokemonEntry.name}, function (err, docs) {
+                    if (err) throw err;
                     if (docs.length) {
                         console.log( PokemonEntry.name + ' already exists in the db');
                     } else {
                         PokemonEntry.save( function (err) {
                             if (err) throw err;
-
                             console.log(PokemonEntry.name + ' data added');
                         });
                     }
@@ -157,8 +179,13 @@ app.get('/data', function(req, res) {
                 callback(null, results);
             })
             .catch( function (err) {
-                var results = 'Not scraped - ' + options.uri;
-                callback(null, results);
+                if (err) {
+                    console.log(options.uri + ' - ' + err);
+                }
+                else {
+                    var results = 'Not scraped - ' + options.uri;
+                    callback(null, results);
+                }
             });
     };
 
@@ -168,7 +195,7 @@ app.get('/data', function(req, res) {
             taskList.push( function(callback) {
                 setTimeout(function() {
                     crawlPage(item, callback);
-                }, 500);
+                }, 1000);
             });
         });
         async.series(taskList, function (err, results) { console.log('Scraping completed'); });

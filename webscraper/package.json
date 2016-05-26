@@ -10,7 +10,7 @@
     "cheerio"    : "latest",
     "underscore" : "latest",
     "async"      : "latest",
-    "mongoose"   : "latest",
-    "request-promise": "latest"
+    "request-promise": "latest",
+    "mongoose"   : "4.4.19"
   }
 }

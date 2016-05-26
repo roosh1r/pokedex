@@ -6,13 +6,16 @@ mongoose.connect('mongodb://localhost:27017/pokedex', function( error ) {
   });
 
   var pokemonURL =
-    mongoose.model('pokemonURL', require('../schema/pokemonURL'), 'pokemonURL');
+    mongoose.model('pokemonURL', require('./pokemonURL'), 'pokemonURL');
   var PokemonData =
-    mongoose.model('pokemonData', require('../schema/pokemon'), 'Pokemon');
+    mongoose.model('pokemonData', require('./pokemon'), 'Pokemon');
+  var evoTree =
+    mongoose.model('evoTree', require('./evoTree'), 'evoTree');
 
   var dataModel = {
     pokemonURL: pokemonURL,
-    PokemonData: PokemonData
+    PokemonData: PokemonData,
+    evoTree: evoTree
   };
 
 module.exports = dataModel;
